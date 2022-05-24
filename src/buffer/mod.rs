@@ -6,16 +6,19 @@ use std::sync::{Arc, RwLock};
 
 use crossterm::terminal::size;
 
-use tui::style::Style;
 use tui::symbols::line;
 use tui::widgets::Widget;
 
+pub mod action;
+pub mod history;
+
 #[derive(Clone)]
 pub struct Buffer {
-    pub path: Option<PathBuf>,
+    pub path: Option<PathBuf>,   // the location of the buffer in storage
     pub data: Arc<RwLock<Rope>>, // the contents of the buffer
-    pub cursor: (usize, usize),  // the position of the cursor .0 is lines and .1 is index
-    pub view: usize,
+    cursor: (usize, usize),      // the position of the cursor .0 is lines and .1 is index
+    view: usize,                 // where the buffer starts to be displayed in the terminal
+    history: history::History,
 }
 
 impl Buffer {
@@ -49,16 +52,19 @@ impl Buffer {
             data,
             cursor: (0, 0),
             view: 0,
+            history: history::History::new(),
         })
     }
 
+    // saves the buffer to disk
     pub fn save(&mut self) {
         let file: File;
         if let Some(path) = &self.path {
             // create the path if the file doesn't exist
-            file = File::create(path).expect("Unable to create file");
+            file = File::create(path)
+                .expect(format!("Unable to create or open {}", path.as_path().display()).as_str());
         } else {
-            // otherwise, open it
+            // TODO: add prompt module and ask for a file name relative to the workspace path
             file = File::create("/home/moncheeta/code/banana/test/test.txt")
                 .expect("Unable to save file");
         }
@@ -68,6 +74,7 @@ impl Buffer {
             .write_to(BufWriter::new(file))
             .expect("Unable to save file");
     }
+    // validates if moving view to line to possible
     fn validate_view_move(&self, line: usize) -> bool {
         if line
             >= self.data.read().unwrap().len_lines()
@@ -217,7 +224,7 @@ impl Widget for Buffer {
                     // when the index is past the width of the line inside of the buffer
                     break;
                 } else if index >= area.width - 1 {
-                    // when the index is pas the width of the terminal
+                    // when the index is past the width of the terminal
                     break;
                 } else if character == '\n' {
                     break;
